@@ -1,0 +1,7 @@
+<driversList>
+  <driver name="Sigma DSLR" label="Sigma DSLR" manufacturer="SIGMA" version="1.0">
+    <binary>indi_sigma_ccd</binary>
+    <driverInterface>1</driverInterface>
+    <group>Cameras</group>
+  </driver>
+</driversList>
