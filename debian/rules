@@ -4,33 +4,13 @@ export DEB_LDFLAGS_MAINT_APPEND =
 export DEB_CXXFLAGS_MAINT_APPEND =
 
 %:
-	dh $@ --buildsystem=cmake --parallel
-
-override_dh_auto_configure:
-	dh_auto_configure -- \
-		-DCMAKE_BUILD_TYPE=Release
-
-override_dh_auto_build:
-	dh_auto_build -- -j$(NUMJOBS)
-
-override_dh_auto_install:
-	dh_auto_install --destdir=$(CURDIR)/debian/indi-sigma
-
 	dh $@ --buildsystem=cmake --parallel --builddirectory=build
 
 override_dh_auto_configure:
-	dh_auto_configure --builddirectory=build -- -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release
+	dh_auto_configure --builddirectory=build -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_FULLY_DISCONNECTED=OFF
 
 override_dh_auto_build:
-	dh_auto_build --
+	dh_auto_build --builddirectory=build
 
 override_dh_auto_install:
-	mkdir -p debian/indi-sigma/usr/include/indi-sigma
-	cp -a include/* debian/indi-sigma/usr/include/indi-sigma/
-	# library
-	mkdir -p debian/indi-sigma/usr/lib/$(DEB_HOST_MULTIARCH)
-	[ -f build/libptp_sigma.so ] && cp -a build/libptp_sigma.so debian/sigma-driver/usr/lib/$(DEB_HOST_MULTIARCH)/ || true
-	[ -f build/libptp_sigma.a ] && cp -a build/libptp_sigma.a debian/sigma-driver/usr/lib/$(DEB_HOST_MULTIARCH)/ || true
-	# example
-	mkdir -p debian/sigma-driver/usr/bin
-	[ -f build/sigma_capture_example ] && install -m 0755 build/sigma_capture_example debian/sigma-driver/usr/bin/ || true
+	dh_auto_install --builddirectory=build --destdir=$(CURDIR)/debian/indi-sigma

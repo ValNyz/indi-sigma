@@ -30,7 +30,11 @@ FetchContent_Declare(
 set(BUILD_TESTS OFF CACHE INTERNAL "")
 set(BUILD_EXAMPLES OFF CACHE INTERNAL "")
 
-FetchContent_MakeAvailable(sigma_driver)
+if (EXISTS ${CMAKE_SOURCE_DIR}/external/sigma-driver/CMakeLists.txt)
+  add_subdirectory(external/sigma-driver EXCLUDE_FROM_ALL)
+else()
+  FetchContent_MakeAvailable(sigma_driver)
+endif()
 
 # Set INDI data dir manually for Fedora ?
 set(INDI_DATA_DIR "/usr/share/indi")
