@@ -1,3 +1,4 @@
+%global         tag %{?tag}%{!?tag:v%{version}}
 %global         debug_package %{nil}
 Name:           indi-sigma
 Version:        %{?version}%{!?version:0.1.0}
@@ -5,7 +6,7 @@ Release:        1%{?dist}
 Summary:        INDI driver for Sigma cameras
 License:        MIT
 URL:            https://github.com/ValNyz/indi-sigma
-Source0:        %{name}-%{version}.tar.gz
+Source0:        %{url}/archive/refs/tags/%{tag}.tar.gz#/%{name}-%{version}.tar.gz
 BuildRequires:  cmake, gcc-c++, libindi-devel, libusb1-devel, LibRaw-devel, cfitsio-devel, libjpeg-turbo-devel
 Requires:       libindi, libusb1, libraw, cfitsio, libjpeg-turbo
 
