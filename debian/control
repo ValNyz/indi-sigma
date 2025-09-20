@@ -1,0 +1,24 @@
+# debian/control
+Source: indi-sigma
+Section: science
+Priority: optional
+Maintainer: Valentin Nyzam <valentin.nyzam@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake,
+ g++,
+ pkg-config,
+ libindi-dev,
+ libusb-1.0-0-dev,
+ libraw-dev,
+ libcfitsio-dev,
+ libjpeg-turbo8-dev
+Standards-Version: 4.7.0
+Homepage: https://github.com/ValNyz/indi-sigma
+Rules-Requires-Root: no
+
+Package: indi-sigma
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: INDI driver for Sigma cameras
+ INDI CCD driver using libptp_sigma to control Sigma cameras.

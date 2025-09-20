@@ -1,0 +1,11 @@
+indi-sigma (1.0.0-1) unstable; urgency=medium
+
+  * Sat Sep 20 2025 Valentin Nyzam <valentin.nyzam@gmail.com> - 0.3.0-1
+  - Add optional RAW path (DNG → FITS) via libraw + cfitsio
+  - JPEG decode to gray8 pixel path; ExposureComplete used for Ekos preview
+  - Use RPM CMake macros (%cmake, %cmake_build, %cmake_install)
+
+  * Fri Sep 19 2025 Valentin Nyzam <valentin.nyzam@gmail.com> - 0.2.0-1
+  - Implement capture target switches and ISO/exposure presets
+  - Emit CCD1 BLOBs for native files when not using pixel path
+  - Install indi_sigma.xml to %{_datadir}/indi

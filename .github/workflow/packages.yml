@@ -1,0 +1,114 @@
+name: build-packages
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  rpm:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora: [40, 41, 42]
+    container: fedora:${{ matrix.fedora }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Derive versions
+        run: |
+            echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV          # v1.0.0
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV    # 1.0.0
+      - name: Install deps
+        run: dnf -y install cmake make gcc-c++ git rpm-build rpmdevtools ninja-build pkgconfig \
+          libindi-devel libusb1-devel cfitsio-devel libraw-devel libjpeg-turbo-devel
+      - name: Build RPM (workspace topdir)
+        run: |
+            echo "%_topdir $PWD/rpmbuild" > ~/.rpmmacros
+            rpmdev-setuptree
+            cp rpm/indi-sigma.spec rpmbuild/SPECS/
+            spectool -g -R rpmbuild/SPECS/indi-sigma.spec --define "tag ${TAG}" --define "version ${VERSION}"
+            rpmbuild -ba rpmbuild/SPECS/indi-sigma.spec --define "tag ${TAG}" --define "version ${VERSION}"
+      - name: Upload RPMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ env.VERSION }}-fc${{ matrix.fedora }}
+          path: |
+            rpmbuild/RPMS/**/*.rpm
+          if-no-files-found: warn
+          overwrite: true
+
+  deb:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: [22.04, 24.04]
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Derive versions
+        run: |
+            echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV          # v1.0.0
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV    # 1.0.0
+      - name: Install deps
+        run: |
+          apt-get update
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential debhelper cmake pkg-config \
+            libindi-dev libusb-1.0-0-dev libcfitsio-dev libraw-dev libjpeg-turbo8-dev \
+            ninja-build dpkg-dev devscripts
+
+      - name: Update changelog version and build package.
+        run: |
+          DEB_VERSION="${VERSION}-1"
+          if [ -f debian/changelog ]; then
+            dch --newversion "$DEB_VERSION" --distribution ${{ matrix.series }} "Release $VERSION"
+          else
+            dch --create --package indi-sigma --newversion "$DEB_VERSION" \
+                --distribution ${{ matrix.series }} "Release $VERSION"
+          fi
+          dpkg-buildpackage -us -uc -b
+
+      - name: Collect debs
+        run: |
+            mkdir -p dist
+            for f in ../*.deb; do
+                [ -e "$f" ] || continue
+                mv -v "$f" "dist/indi-sigma_${{ env.VERSION }}-1_${{ matrix.series }}_amd64.deb"
+            done
+
+      - name: Upload DEB artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ env.VERSION }}-${{ matrix.series }}
+          path: dist/*.deb
+          if-no-files-found: warn
+          overwrite: true
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [rpm, deb]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+
+      - name: Flatten artifacts
+        run: |
+          shopt -s globstar nullglob
+          mkdir -p upload
+          mv dist/**/*.{rpm,deb} upload/ || true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: upload/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
