@@ -60,6 +60,7 @@ jobs:
 
       - name: Install build deps
         run: |
+          sudo add-apt-repository ppa:mutlaqja/ppa
           sudo apt-get update
           sudo apt-get install -y build-essential debhelper cmake pkg-config \
             libindi-dev libusb-1.0-0-dev libcfitsio-dev libraw-dev libjpeg-turbo8-dev \
