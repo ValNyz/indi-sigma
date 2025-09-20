@@ -21,8 +21,7 @@ jobs:
             echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV          # v1.0.0
             echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV    # 1.0.0
       - name: Install deps
-        run: dnf -y update && dnf -y install cmake make gcc-c++ git rpm-build rpmdevtools ninja-build pkgconfig \
-          libindi-devel libusb1-devel cfitsio-devel LibRaw-devel libjpeg-turbo-devel
+        run: sudo dnf -y install cmake make gcc-c++ git rpm-build rpmdevtools ninja-build pkgconfig libindi-devel libusb1-devel cfitsio-devel LibRaw-devel libjpeg-turbo-devel
       - name: Build RPM (workspace topdir)
         run: |
             echo "%_topdir $PWD/rpmbuild" > ~/.rpmmacros
@@ -44,7 +43,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ubuntu: [22.04, 24.04]
+        series: [jammy, noble]   # 22.04, 24.04
+        include:
+          - series: jammy
+            image: ubuntu:22.04
+          - series: noble
+            image: ubuntu:24.04
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -53,6 +57,9 @@ jobs:
         run: |
             echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV          # v1.0.0
             echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV    # 1.0.0
+      - name: Install deps
+        run: |
+          apt-get update
 
       - name: Install build deps
         run: |
