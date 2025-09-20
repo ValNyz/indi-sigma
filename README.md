@@ -3,11 +3,15 @@
 INDI CCD driver for Sigma cameras backed by a custom PTP for Sigma camera library : [sigma-driver](https://github.com/ValNyz/sigma-driver).
 
 ## Features
-- USB PTP connect using libptp_sigma
-- Discrete exposures (no BULB)
-- ISO and exposure preset control
-- Image download to client or local disk
-- RAW path: DNG → 16‑bit FITS with libraw + cfitsio
+- [x] USB PTP connection
+- [x] Discrete exposures (no BULB), nearest-time clamping
+- [x] ISO and exposure preset control
+- [x] JPEG path: decode to 8-bit mono and publish via `ExposureComplete`
+- [x] RAW path: DNG → 16-bit FITS with libraw + cfitsio
+- [ ] Error states and logs compatible with Ekos
+- [ ] Capture target selection: SD Card / RAM / Both
+- [ ] Live View streaming
+- [ ] Bulb mode
 
 ## Build
 
@@ -33,12 +37,6 @@ indiserver -v indi_sigma_ccd
 ```
 
 Connect from KStars/Ekos and select **Sigma DSLR**.
-
-## Implementation notes
-
-- The driver publishes pixel buffers for JPEG and can publish FITS BLOBs for RAW.
-- `CCD_DOWNLOAD_TIMEOUT` adds extra seconds to wait for the file after exposure.
-- LiveView hooks exist but require support in libptp_sigma.
 
 ## Troubleshooting
 
