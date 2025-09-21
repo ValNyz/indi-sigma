@@ -206,9 +206,6 @@ bool SigmaCCD::updateProperties()
     {
       // TODO: False, pixel size is 6 for FP and i don't know for FP L
       SetCCDParams(res->first, res->second, 12, 6, 6);
-      // PrimaryCCD.setResolution(res->first, res->second);
-      // PrimaryCCD.setBin(1, 1);
-      // PrimaryCCD.setPixelSize(3.76, 3.76); // Sigma FP pixel size in microns
     }
     else
       // Dummy values until first capture is done
@@ -219,6 +216,17 @@ bool SigmaCCD::updateProperties()
 
     LOGF_INFO("Connected to %s (S/N: %s, FW: %s)", cam_->model().c_str(),
               cam_->serialNumber().c_str(), cam_->firmwareVersion().c_str());
+
+    Streamer->setPixelFormat(INDI_MONO, 8);
+
+    // Set FPS limits if needed
+    INumberVectorProperty *streamExp = getNumber("STREAM_EXPOSURE");
+    if (streamExp)
+    {
+      streamExp->np[0].min = 0.04;
+      streamExp->np[0].max = 1;
+      streamExp->np[0].value = 0.1;
+    }
   }
   else
   {
@@ -310,7 +318,7 @@ bool SigmaCCD::StartExposure(float duration)
   if (!isSimulation())
   {
     // Set ISO
-    int iso = switchSelectedValue(ISOSP, cam_->supportedISOs(), 400);
+    int iso = switchSelectedValue(ISOSP, cam_->supportedISOs(), defaultISO);
     cam_->setISO(iso);
     // Set exposure time
     cam_->setExposureSeconds(clamped);
@@ -437,8 +445,9 @@ bool SigmaCCD::grabImage()
 
   // Handle JPEG images
   int formatIndex = IUFindOnSwitchIndex(CaptureFormatSP);
+  bool sizeSet = false;
   if (formatIndex == 0)
-    return decodeJPEG(img);
+    return decodeJPEG(img, false, sizeSet);
   else
     return decodeDNG(img, formatIndex == 2 ? 14 : 12);
 }
@@ -468,6 +477,90 @@ double SigmaCCD::calcTimeLeft()
   return ExposureRequest - timeSince;
 }
 
+bool SigmaCCD::StartStreaming()
+{
+  if (Streamer->isBusy())
+    return true;
+
+  if (!cam_->startLiveView())
+  {
+    LOG_ERROR("Failed to start live view");
+    return false;
+  }
+
+  // Reset the primary CCD frame buffer size for streaming
+  // This is important to clear any previous capture sizes
+  PrimaryCCD.setFrameBufferSize(0);
+
+  Streamer->setPixelFormat(INDI_RGB, 8);
+
+  isStreaming = true;
+
+  // Start streaming thread
+  int rc = pthread_create(&streamThread, nullptr, &SigmaCCD::streamVideoHelper, this);
+  if (rc != 0)
+  {
+    LOG_ERROR("Failed to create streaming thread");
+    cam_->stopLiveView();
+    isStreaming = false;
+    return false;
+  }
+
+  LOG_INFO("Live view started");
+  return true;
+}
+
+bool SigmaCCD::StopStreaming()
+{
+  if (!isStreaming)
+    return true;
+
+  isStreaming = false;
+
+  // Wait for thread to finish
+  pthread_join(streamThread, nullptr);
+
+  cam_->stopLiveView();
+
+  // Restore full sensor resolution for captures
+  if (auto res = cam_->sensorResolution())
+  {
+    PrimaryCCD.setFrame(0, 0, res->first, res->second);
+    PrimaryCCD.setFrameBufferSize(res->first * res->second * 2); // 16-bit for RAW
+  }
+
+  LOG_INFO("Live view stopped");
+  return true;
+}
+
+void *SigmaCCD::streamVideo(void *arg)
+{
+  bool sizeSet = false;
+
+  while (isStreaming)
+  {
+    std::vector<uint8_t> jpegData;
+
+    if (cam_->readLiveViewFrame(jpegData) && !jpegData.empty())
+    {
+      // Decode JPEG to RGB
+      SigmaImage img;
+      img.data = jpegData;
+
+      if (!decodeJPEG(img, true, sizeSet))
+        LOG_ERROR("Failed to decode current jpeg image");
+    }
+
+    // Control frame rate (e.g., 10 FPS)
+    // Use INDI's streaming exposure property for timing
+    INumberVectorProperty *streamExp = getNumber("STREAMING_EXPOSURE");
+    double exposureTime = streamExp ? streamExp->np[0].value : 0.1; // seconds
+    usleep(exposureTime * 1000000);                                 // Convert to microseconds
+  }
+
+  return nullptr;
+}
+
 // ISNewNumber: handle it
 bool SigmaCCD::ISNewNumber(const char *dev, const char *name,
                            double values[], char *names[], int n)
@@ -495,7 +588,7 @@ bool SigmaCCD::ISNewSwitch(const char *dev, const char *name,
     {
       auto *sp = CaptureFormatSP.getSwitch();
       IUUpdateSwitch(sp, states, names, n);
-      int idx = IUFindOnSwitchIndex(sp); // assumes item[0]=JPEG, item[1]=DNG12, item[2]=DNG14
+      int idx = sp->findOnSwitchIndex(); // assumes item[0]=JPEG, item[1]=DNG12, item[2]=DNG14
       cam_->setImageQuality(idx == 0);
       if (idx > 0)
         cam_->setDNGQuality(idx == 2);
@@ -510,7 +603,7 @@ bool SigmaCCD::ISNewSwitch(const char *dev, const char *name,
     {
       auto *svp = ISOSP.getSwitch();
       IUUpdateSwitch(svp, states, names, n);
-      int idx = IUFindOnSwitchIndex(svp);
+      int idx = svp->findOnSwitchIndex();
       if (idx >= 0 && (size_t)idx < ISOItems.size())
       {
         int iso = cam_->supportedISOs()[idx]; // your parallel ISO table
@@ -532,7 +625,7 @@ bool SigmaCCD::ISNewSwitch(const char *dev, const char *name,
     {
       auto *svp = CaptureTargetSP.getSwitch();
       IUUpdateSwitch(svp, states, names, n);
-      int idx = IUFindOnSwitchIndex(svp); // 0..2
+      int idx = svp->findOnSwitchIndex(); // 0..2
       cam_->setDestination(idx);
       svp->s = IPS_OK;
 
@@ -546,7 +639,7 @@ bool SigmaCCD::ISNewSwitch(const char *dev, const char *name,
     {
       auto *svp = ExposurePresetSP.getSwitch();
       IUUpdateSwitch(svp, states, names, n);
-      int idx = IUFindOnSwitchIndex(svp);
+      int idx = svp->findOnSwitchIndex();
       if (idx >= 0 && (size_t)idx < ExposurePresetItems.size())
       {
         double t = cam_->supportedExposures()[idx]; // your shutter table from backend
@@ -567,7 +660,7 @@ bool SigmaCCD::ISNewSwitch(const char *dev, const char *name,
   return INDI::CCD::ISNewSwitch(dev, name, states, names, n);
 }
 
-bool SigmaCCD::decodeJPEG(const SigmaImage &img)
+bool SigmaCCD::decodeJPEG(const SigmaImage &img, bool forStreaming, bool &sizeSet)
 {
   // Decode JPEG to raw pixels
   struct jpeg_decompress_struct cinfo;
@@ -585,45 +678,76 @@ bool SigmaCCD::decodeJPEG(const SigmaImage &img)
 
   jpeg_create_decompress(&cinfo);
   jpeg_mem_src(&cinfo, img.data.data(), img.data.size());
-  jpeg_read_header(&cinfo, TRUE);
 
-  // Force RGB output
+  if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK)
+  {
+    jpeg_destroy_decompress(&cinfo);
+    return false;
+  }
+
+  int width = cinfo.image_width;
+  int height = cinfo.image_height;
+  int channels = 3;
+  size_t frameSize = width * height * channels;
+  LOGF_INFO("LiveView size: %dx%dx%d", width, height, channels);
+
+  // Set size only once when we know it
+  if (!sizeSet)
+  {
+    // Reset PrimaryCCD dimensions for streaming
+    PrimaryCCD.setFrame(0, 0, width, height);
+    PrimaryCCD.setFrameBufferSize(frameSize);
+
+    Streamer->setSize(width, height);
+    sizeSet = true;
+    LOGF_INFO("LiveView size: %dx%d", width, height);
+  }
+
   cinfo.out_color_space = JCS_RGB;
   jpeg_start_decompress(&cinfo);
 
-  int width = cinfo.output_width;
-  int height = cinfo.output_height;
-  int channels = cinfo.output_components;
-
-  // Update CCD parameters
-  PrimaryCCD.setFrame(0, 0, width, height);
-  PrimaryCCD.setFrameBufferSize(width * height * channels);
-  PrimaryCCD.setNAxis(channels == 1 ? 2 : 3);
-  PrimaryCCD.setBPP(8);
-
-  // Allocate buffer for decoded data
-  uint8_t *buffer = PrimaryCCD.getFrameBuffer();
-
-  // Decode line by line
-  JSAMPROW row_pointer;
-  int row_stride = width * channels;
-
-  while (cinfo.output_scanline < height)
+  if (forStreaming)
   {
-    row_pointer = &buffer[cinfo.output_scanline * row_stride];
-    jpeg_read_scanlines(&cinfo, &row_pointer, 1);
+    // For streaming, use a local buffer
+    std::vector<uint8_t> buffer(frameSize);
+
+    int row_stride = width * channels;
+    while (cinfo.output_scanline < cinfo.output_height)
+    {
+      JSAMPROW row = &buffer[cinfo.output_scanline * row_stride];
+      jpeg_read_scanlines(&cinfo, &row, 1);
+    }
+
+    jpeg_finish_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
+
+    // Send to streamer, NOT ExposureComplete
+    Streamer->newFrame(buffer.data(), buffer.size());
   }
+  else
+  {
+    // For capture, use PrimaryCCD buffer
+    PrimaryCCD.setFrame(0, 0, width, height);
+    PrimaryCCD.setFrameBufferSize(frameSize);
+    PrimaryCCD.setNAxis(channels == 1 ? 2 : 3);
+    PrimaryCCD.setBPP(8);
 
-  jpeg_finish_decompress(&cinfo);
-  jpeg_destroy_decompress(&cinfo);
+    uint8_t *buffer = PrimaryCCD.getFrameBuffer();
 
-  LOGF_INFO("Decoded JPEG: %dx%d, %d channels", width, height, channels);
+    int row_stride = width * channels;
+    while (cinfo.output_scanline < cinfo.output_height)
+    {
+      JSAMPROW row = &buffer[cinfo.output_scanline * row_stride];
+      jpeg_read_scanlines(&cinfo, &row, 1);
+    }
 
-  // Notify INDI that exposure is complete
-  ExposureComplete(&PrimaryCCD);
+    jpeg_finish_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
 
-  LOGF_INFO("Downloaded %s image: %zu bytes (%dx%d)", img.mime.c_str(),
-            img.data.size(), img.width, img.height);
+    // Only call ExposureComplete for actual captures
+    ExposureComplete(&PrimaryCCD);
+    LOGF_INFO("Captured JPEG: %dx%d, %d channels", width, height, channels);
+  }
 
   return true;
 }

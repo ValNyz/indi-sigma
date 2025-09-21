@@ -49,6 +49,11 @@ public:
   bool UpdateCCDFrame(int x, int y, int w, int h) override;
   void TimerHit() override;
 
+  // Liveview specific
+  bool StartStreaming() override;
+  bool StopStreaming() override;
+  void *streamVideo(void *arg);
+
   // Property handlers
   bool ISNewNumber(const char *dev, const char *name, double values[],
                    char *names[], int n) override;
@@ -60,14 +65,18 @@ protected:
   double clampToSupported(double seconds);
   double calcTimeLeft();
   bool grabImage();
+  static void *streamVideoHelper(void *context) { return ((SigmaCCD *)context)->streamVideo(nullptr); }
 
 private:
   void bind_logger();
 
-  bool decodeJPEG(const SigmaImage& img);
-  bool decodeDNG(const SigmaImage& img, int bitDepth);
+  bool decodeJPEG(const SigmaImage &img, bool forStreaming, bool &sizeSet);
+  bool decodeDNG(const SigmaImage &img, int bitDepth);
 
   std::unique_ptr<SigmaBackend> cam_;
+
+  bool isStreaming{false};
+  pthread_t streamThread;
 
   // ISO List
   INDI::PropertySwitch ISOSP{0};
