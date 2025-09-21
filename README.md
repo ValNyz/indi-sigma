@@ -10,7 +10,7 @@ INDI CCD driver for Sigma cameras backed by a custom PTP for Sigma camera librar
 - [x] RAW path: DNG → 16-bit FITS with libraw + cfitsio
 - [ ] Error states and logs compatible with Ekos
 - [ ] Capture target selection: SD Card / RAM / Both
-- [ ] Live View streaming
+- [x] Live View streaming
 - [ ] Bulb mode
 
 ## Build
