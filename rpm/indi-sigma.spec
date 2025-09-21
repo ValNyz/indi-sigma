@@ -8,7 +8,7 @@ License:        MIT
 URL:            https://github.com/ValNyz/indi-sigma
 Source0:        %{url}/archive/refs/tags/%{tag}.tar.gz#/%{name}-%{version}.tar.gz
 BuildRequires:  cmake, gcc-c++, libindi-devel, libusb1-devel, LibRaw-devel, cfitsio-devel, libjpeg-turbo-devel
-Requires:       libindi, libusb1, libraw, cfitsio, libjpeg-turbo
+Requires:       libindi, libusb1, LibRaw, cfitsio, libjpeg-turbo
 
 %description
 INDI CCD driver for Sigma cameras using libptp_sigma.

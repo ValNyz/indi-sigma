@@ -10,7 +10,7 @@ Build-Depends:
  pkg-config,
  libindi-dev,
  libusb-1.0-0-dev,
- libraw-dev,
+ LibRaw-dev,
  libcfitsio-dev,
  libjpeg-turbo8-dev
 Standards-Version: 4.7.0
