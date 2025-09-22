@@ -6,11 +6,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(GNUInstallDirs)
 
+# If asking to strip RPATH. Otherwise add RPATH for local installs.
+option(STRIP_RPATH "Strip all RPATH/RUNPATH from installed binaries" OFF)
+
 set(PTP_SIGMA_PREFIX ${CMAKE_BINARY_DIR}/ptp_sigma/prefix)
 set(PTP_SIGMA_SO "${CMAKE_SHARED_LIBRARY_PREFIX}ptp_sigma${CMAKE_SHARED_LIBRARY_SUFFIX}")
 set(PTP_SIGMA_BYPRODUCT "${PTP_SIGMA_PREFIX}/${CMAKE_INSTALL_LIBDIR}/${PTP_SIGMA_SO}")
 set(BUILD_TESTS OFF CACHE INTERNAL "")
 set(BUILD_EXAMPLES OFF CACHE INTERNAL "")
+
+# Absolute lib dir where libptp_sigma installs
+set(_abs_libdir "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+set(_abs_includedir "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}")
+
 # Set INDI data dir manually for Fedora ?
 set(INDI_DATA_DIR "/usr/share/indi")
 
@@ -23,8 +31,8 @@ pkg_check_modules(JPEG REQUIRED libjpeg)
 pkg_check_modules(LIBRAW REQUIRED libraw)
 
 file(MAKE_DIRECTORY
-  "${PTP_SIGMA_PREFIX}/include"
-  "${PTP_SIGMA_PREFIX}/lib"
+  "${PTP_SIGMA_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}"
+  "${PTP_SIGMA_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
 )
 
 include(ExternalProject)
@@ -36,6 +44,8 @@ ExternalProject_Add(PTP_SIGMA_EP
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DBUILD_SHARED_LIBS=ON
   -DBUILD_TESTS=OFF
+  -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+  -DCMAKE_INSTALL_INCLUDEDIR=${CMAKE_INSTALL_INCLUDEDIR}
   INSTALL_DIR ${PTP_SIGMA_PREFIX}
   UPDATE_DISCONNECTED 1
   BUILD_BYPRODUCTS ${PTP_SIGMA_BYPRODUCT}
@@ -76,11 +86,7 @@ target_link_libraries(indi_sigma_ccd PRIVATE
   pthread
 )
 
-# Absolute lib dir where libptp_sigma installs
-set(_abs_libdir "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
-
-# If packaging (DESTDIR set), strip RPATH. Otherwise add RPATH for local installs.
-if(DEFINED ENV{DESTDIR})
+if(STRIP_RPATH)
   set_target_properties(indi_sigma_ccd PROPERTIES
     BUILD_RPATH  ""
     INSTALL_RPATH ""

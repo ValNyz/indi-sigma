@@ -17,7 +17,7 @@ INDI CCD driver for Sigma cameras using libptp_sigma.
 %autosetup -n %{name}-%{version}
 
 %build
-%cmake -DCMAKE_BUILD_TYPE=Release
+%cmake -DCMAKE_BUILD_TYPE=Release -DSTRIP_RPATH=ON
 %cmake_build
 
 %install
