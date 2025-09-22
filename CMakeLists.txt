@@ -76,11 +76,23 @@ target_link_libraries(indi_sigma_ccd PRIVATE
   pthread
 )
 
-# Set RPATH for finding libraries at runtime
-set_target_properties(indi_sigma_ccd PROPERTIES
-  INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}"
-  INSTALL_RPATH_USE_LINK_PATH TRUE
-)
+# Absolute lib dir where libptp_sigma installs
+set(_abs_libdir "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+
+# If packaging (DESTDIR set), strip RPATH. Otherwise add RPATH for local installs.
+if(DEFINED ENV{DESTDIR})
+  set_target_properties(indi_sigma_ccd PROPERTIES
+    BUILD_RPATH  ""
+    INSTALL_RPATH ""
+    SKIP_BUILD_RPATH TRUE
+  )
+else()
+  set_target_properties(indi_sigma_ccd PROPERTIES
+    BUILD_RPATH   "${_abs_libdir}"
+    INSTALL_RPATH "${_abs_libdir}"
+    SKIP_BUILD_RPATH FALSE
+  )
+endif()
 
 # Install the ptp_sigma deliverables into this package
 # Headers
