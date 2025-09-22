@@ -1,11 +1,18 @@
-indi-sigma (0.2.0-1) unstable; urgency=medium
+indi-sigma (0.3.0-1) unstable; urgency=medium
+* 0.3.0-1
+  - Add liveview using libjpeg decoding
+-- Valentin Nyzam <valentin.nyzam@gmail.com>  Sat, 20 Sep 2025 18:21:57 +0200
 
-  * Sat Sep 20 2025 Valentin Nyzam <valentin.nyzam@gmail.com> - 0.3.0-1
+indi-sigma (0.2.0-1) unstable; urgency=medium
+* 0.2.0-1
   - Add optional RAW path (DNG → FITS) via libraw + cfitsio
   - JPEG decode to gray8 pixel path; ExposureComplete used for Ekos preview
   - Use RPM CMake macros (%cmake, %cmake_build, %cmake_install)
+-- Valentin Nyzam <valentin.nyzam@gmail.com>  Sat, 20 Sep 2025 9:44:19 +0200
 
-  * Fri Sep 19 2025 Valentin Nyzam <valentin.nyzam@gmail.com> - 0.2.0-1
+indi-sigma (0.1.0-1) unstable; urgency=medium
+* 0.1.0-1
   - Implement capture target switches and ISO/exposure presets
   - Emit CCD1 BLOBs for native files when not using pixel path
   - Install indi_sigma.xml to %{_datadir}/indi
+-- Valentin Nyzam <valentin.nyzam@gmail.com>  Fri, 19 Sep 2025 14:38:31 +0200

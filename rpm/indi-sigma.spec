@@ -28,6 +28,10 @@ INDI CCD driver for Sigma cameras using libptp_sigma.
 %doc README.md
 %{_bindir}/indi_sigma_ccd
 %{_datadir}/indi/indi_sigma.xml
+%{_libdir}/libptp_sigma.so
+%{_includedir}/ptp/*.h
+%{_includedir}/sigma/*.h
+%{_includedir}/utils/*.h
 
 %changelog
 * Sat Sep 20 2025 Val Nyz <valentin.nyzam@gmail.com> - 0.3.0-1
