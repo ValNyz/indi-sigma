@@ -53,18 +53,11 @@ static inline ISwitchVectorProperty *bindSwitchVectorFormat(INDI::PropertySwitch
   return bindSwitchVector(prop, items, labs);
 }
 
-// index of ON item, or -1
-inline int switchSelectedIndex(const INDI::PropertySwitch &p)
-{
-  ISwitchVectorProperty *svp = const_cast<INDI::PropertySwitch &>(p).getSwitch();
-  return svp ? IUFindOnSwitchIndex(svp) : -1;
-}
-
 // label of ON item, or empty
 inline std::string switchSelectedLabel(const INDI::PropertySwitch &p)
 {
-  ISwitchVectorProperty *svp = const_cast<INDI::PropertySwitch &>(p).getSwitch();
-  int i = svp ? IUFindOnSwitchIndex(svp) : -1;
+  int i = const_cast<INDI::PropertySwitch &>(p).getSwitch()->findOnSwitchIndex();
+  auto svp = const_cast<INDI::PropertySwitch &>(p).getSwitch();
   return (i >= 0) ? std::string(svp->sp[i].label) : std::string();
 }
 
@@ -74,7 +67,7 @@ inline T switchSelectedValue(const INDI::PropertySwitch &p,
                              const std::vector<T> &vals,
                              T fallback)
 {
-  int i = switchSelectedIndex(p);
+  int i = const_cast<INDI::PropertySwitch &>(p).getSwitch()->findOnSwitchIndex();
   return (i >= 0 && static_cast<size_t>(i) < vals.size()) ? vals[i] : fallback;
 }
 
@@ -127,7 +120,7 @@ bool SigmaCCD::initProperties()
   BayerTP[2].setText("RGGB");
 
   // Set capabilities
-  uint32_t cap = CCD_CAN_ABORT | CCD_HAS_STREAMING | CCD_HAS_BAYER; // TODO Not sure about this, should check each capability.
+  uint32_t cap = CCD_HAS_STREAMING | CCD_HAS_BAYER; // TODO Not sure about this, should check each capability.
   SetCCDCapability(cap);
 
   PrimaryCCD.getCCDInfo().setPermission(IP_RW);
@@ -218,15 +211,6 @@ bool SigmaCCD::updateProperties()
               cam_->serialNumber().c_str(), cam_->firmwareVersion().c_str());
 
     Streamer->setPixelFormat(INDI_MONO, 8);
-
-    // Set FPS limits if needed
-    INumberVectorProperty *streamExp = getNumber("STREAM_EXPOSURE");
-    if (streamExp)
-    {
-      streamExp->np[0].min = 0.04;
-      streamExp->np[0].max = 1;
-      streamExp->np[0].value = 0.1;
-    }
   }
   else
   {
@@ -324,7 +308,7 @@ bool SigmaCCD::StartExposure(float duration)
     cam_->setExposureSeconds(clamped);
     cam_->setDownloadTimeout(DownloadTimeoutNP[0].value);
     // Set image format
-    int formatIndex = IUFindOnSwitchIndex(CaptureFormatSP);
+    int formatIndex = CaptureFormatSP.getSwitch()->findOnSwitchIndex();
     bool useJpeg = (formatIndex == 0);
     cam_->setImageQuality(useJpeg);
     if (useJpeg)
@@ -332,7 +316,7 @@ bool SigmaCCD::StartExposure(float duration)
     else
       PrimaryCCD.setBPP(16);
     PrimaryCCD.setFrameType(INDI::CCDChip::LIGHT_FRAME);
-    cam_->setDestination(IUFindOnSwitchIndex(CaptureTargetSP));
+    cam_->setDestination(CaptureTargetSP.getSwitch()->findOnSwitchIndex());
 
     // Trigger capture
     if (!cam_->triggerCapture())
@@ -345,7 +329,7 @@ bool SigmaCCD::StartExposure(float duration)
   InExposure = true;
   gettimeofday(&ExpStart, nullptr);
 
-  int formatIndex = IUFindOnSwitchIndex(CaptureFormatSP);
+  int formatIndex = CaptureFormatSP.getSwitch()->findOnSwitchIndex();
   LOGF_INFO("Started %.3fs exposure (ISO %d, %s format)", clamped,
             switchSelectedValue(ISOSP, cam_->supportedISOs(), defaultISO),
             formatIndex == 0 ? "JPEG" : "RAW");
@@ -444,11 +428,11 @@ bool SigmaCCD::grabImage()
   }
 
   // Handle JPEG images
-  int formatIndex = IUFindOnSwitchIndex(CaptureFormatSP);
+  int formatIndex = CaptureFormatSP.getSwitch()->findOnSwitchIndex();
   bool sizeSet = false;
-  if (formatIndex == 0)
+  if (formatIndex == 0) // 0 -> JPEG
     return decodeJPEG(img, false, sizeSet);
-  else
+  else // 1 -> RAW 12bits, 2 -> RAW 14 bits
     return decodeDNG(img, formatIndex == 2 ? 14 : 12);
 }
 
@@ -553,7 +537,7 @@ void *SigmaCCD::streamVideo(void *arg)
 
     // Control frame rate (e.g., 10 FPS)
     // Use INDI's streaming exposure property for timing
-    INumberVectorProperty *streamExp = getNumber("STREAMING_EXPOSURE");
+    auto streamExp = getNumber("CCD_EXPOSURE").getNumber();
     double exposureTime = streamExp ? streamExp->np[0].value : 0.1; // seconds
     usleep(exposureTime * 1000000);                                 // Convert to microseconds
   }
