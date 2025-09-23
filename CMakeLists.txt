@@ -38,7 +38,7 @@ file(MAKE_DIRECTORY
 include(ExternalProject)
 ExternalProject_Add(PTP_SIGMA_EP
   GIT_REPOSITORY https://github.com/ValNyz/sigma-driver.git
-  GIT_TAG v1.0.6
+  GIT_TAG v1.0.7
   CMAKE_ARGS
   -DCMAKE_INSTALL_PREFIX=${PTP_SIGMA_PREFIX}
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
