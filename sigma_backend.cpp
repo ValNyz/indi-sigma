@@ -179,7 +179,10 @@ bool SigmaBackend::setExposureSeconds(double seconds)
   try
   {
     CamDataGroup1 g1;
-    g1.shutterSpeed = pImpl->secondsToApex(seconds);
+    if (seconds == 300)
+      g1.shutterSpeed = 0x08; // Bulb mode
+    else
+      g1.shutterSpeed = pImpl->secondsToApex(seconds);
     pImpl->camera->set_group(g1);
     LOG_INFO("Set exposure to %.3f seconds (APEX: %d)", seconds,
              *g1.shutterSpeed);
@@ -373,32 +376,6 @@ bool SigmaBackend::downloadLastCapture(SigmaImage &out)
     else
       LOG_INFO("Capture complete, status: 0x%04X", static_cast<uint16_t>(status.Status));
 
-    // If destination is computer, wait for ObjectAdded event and download
-    // if (status.Dest == DestToSave::InComputer)
-    // {
-    //   LOG_INFO("Start capture loading in computer, dest: 0x%04X", static_cast<uint16_t>(status.Dest));
-    //   if (auto handle = pImpl->camera->wait_object_added(5000, 200)) // This is not working...
-    //   {
-    //     out.data = pImpl->camera->get_object(*handle);
-
-    //     // Get object info for metadata
-    //     auto info_bytes = pImpl->camera->get_object_info(*handle);
-    //     // Parse info for dimensions and format (simplified)
-    //     out.mime = "image/jpeg";
-    //     if (auto res = sensorResolution())
-    //     {
-    //       out.width = res->first;
-    //       out.height = res->second;
-    //     }
-    //     out.filesize = out.data.size();
-    //     pImpl->camera->clear_image_db_single(status.ImageId);
-
-    //     LOG_INFO("Downloaded image: %zu bytes", out.data.size());
-    //     return true;
-    //   }
-    // }
-    // else
-    // {
     LOG_INFO("Start capture loading in camera, dest: 0x%04X", static_cast<uint16_t>(status.Dest));
     // Use vendor-specific download for camera storage
     auto info = pImpl->camera->get_pict_file_info2();

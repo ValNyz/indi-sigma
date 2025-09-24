@@ -102,13 +102,6 @@ bool SigmaCCD::initProperties()
   ExposurePresetSP.fill(getDeviceName(), "CCD_EXPOSURE_PRESETS", "Presets", MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 60,
                         IPS_IDLE);
 
-  CaptureTargetSP[InCamera].fill("SD Card", "SD Card", ISS_ON);
-  CaptureTargetSP[InComputer].fill("RAM", "RAM", ISS_OFF);
-  CaptureTargetSP[Both].fill("Both", "Both", ISS_OFF);
-  CaptureTargetSP.fill(getDeviceName(), "CCD_CAPTURE_TARGET", "Capture Target", IMAGE_SETTINGS_TAB, IP_RW, ISR_1OFMANY, 0,
-                       IPS_IDLE);
-  CaptureTargetSP.load();
-
   // Download Timeout
   DownloadTimeoutNP[0].fill("VALUE", "Seconds", "%.f", 0, 30, 5, 5);
   DownloadTimeoutNP.fill(getDeviceName(), "CCD_DOWNLOAD_TIMEOUT", "Download Timeout", OPTIONS_TAB, IP_RW, 60, IPS_IDLE);
@@ -181,7 +174,6 @@ bool SigmaCCD::updateProperties()
       auto svp = bindSwitchVectorFormat(ISOSP, ISOItems, cam_->supportedISOs(), formatISO);
       defineProperty(svp);
     }
-    defineProperty(CaptureTargetSP);
 
     imageBP = getBLOB("CCD1");
 
@@ -216,7 +208,6 @@ bool SigmaCCD::updateProperties()
   {
     deleteProperty(ExposurePresetSP);
     deleteProperty(ISOSP);
-    deleteProperty(CaptureTargetSP);
     deleteProperty(DownloadTimeoutNP);
   }
 
@@ -296,7 +287,6 @@ bool SigmaCCD::StartExposure(float duration)
   }
 
   ExposureRequest = duration;
-  PrimaryCCD.setExposureDuration(clamped);
 
   // Configure camera settings
   if (!isSimulation())
@@ -316,8 +306,8 @@ bool SigmaCCD::StartExposure(float duration)
     else
       PrimaryCCD.setBPP(16);
     PrimaryCCD.setFrameType(INDI::CCDChip::LIGHT_FRAME);
-    cam_->setDestination(CaptureTargetSP.getSwitch()->findOnSwitchIndex());
 
+    PrimaryCCD.setExposureDuration(clamped);
     // Trigger capture
     if (!cam_->triggerCapture())
     {
@@ -342,11 +332,15 @@ bool SigmaCCD::AbortExposure()
   if (!InExposure)
     return true;
 
-  InExposure = false;
-
   if (!isSimulation())
   {
-    cam_->abortCapture();
+    if (InExposure)
+    {
+      // Can't actually abort, but pretend we did for the UI
+      LOG_INFO("Camera can't abort. Marking as complete (hardware still exposing)...");
+
+      return false;
+    }
   }
 
   LOG_INFO("Exposure aborted");
@@ -396,10 +390,8 @@ void SigmaCCD::TimerHit()
         delete[] data;
       }
       else
-      {
         // Download real image
         grabImage();
-      }
     }
     else
     {
@@ -428,12 +420,25 @@ bool SigmaCCD::grabImage()
   }
 
   // Handle JPEG images
-  int formatIndex = CaptureFormatSP.getSwitch()->findOnSwitchIndex();
-  bool sizeSet = false;
-  if (formatIndex == 0) // 0 -> JPEG
-    return decodeJPEG(img, false, sizeSet);
-  else // 1 -> RAW 12bits, 2 -> RAW 14 bits
-    return decodeDNG(img, formatIndex == 2 ? 14 : 12);
+  int format_index = CaptureFormatSP.getSwitch()->findOnSwitchIndex();
+  bool size_set = false;
+  if (format_index == 0)
+  { // 0 -> JPEG
+    if (!decodeJPEG(img, size_set, false))
+    {
+      LOG_ERROR("Failed to decode current JPEG image");
+      return false;
+    }
+  }
+  else
+  { // 1 -> RAW 12bits, 2 -> RAW 14 bits
+    if (!decodeDNG(img, format_index == 2 ? 14 : 12))
+    {
+      LOG_ERROR("Failed to decode current DNG image");
+      return false;
+    }
+  }
+  return true;
 }
 
 double SigmaCCD::clampToSupported(double seconds)
@@ -475,7 +480,6 @@ bool SigmaCCD::StartStreaming()
   // Reset the primary CCD frame buffer size for streaming
   // This is important to clear any previous capture sizes
   PrimaryCCD.setFrameBufferSize(0);
-
   Streamer->setPixelFormat(INDI_RGB, 8);
 
   isStreaming = true;
@@ -519,7 +523,7 @@ bool SigmaCCD::StopStreaming()
 
 void *SigmaCCD::streamVideo(void *arg)
 {
-  bool sizeSet = false;
+  bool size_set = false;
 
   while (isStreaming)
   {
@@ -531,7 +535,7 @@ void *SigmaCCD::streamVideo(void *arg)
       SigmaImage img;
       img.data = jpegData;
 
-      if (!decodeJPEG(img, true, sizeSet))
+      if (!decodeJPEG(img, size_set, true))
         LOG_ERROR("Failed to decode current jpeg image");
     }
 
@@ -541,7 +545,6 @@ void *SigmaCCD::streamVideo(void *arg)
     double exposureTime = streamExp ? streamExp->np[0].value : 0.1; // seconds
     usleep(exposureTime * 1000000);                                 // Convert to microseconds
   }
-
   return nullptr;
 }
 
@@ -604,20 +607,6 @@ bool SigmaCCD::ISNewSwitch(const char *dev, const char *name,
       return true;
     }
 
-    // --- Capture Target (InCamera / InComputer / Both) ---
-    if (!strcmp(name, CaptureTargetSP.getName()))
-    {
-      auto *svp = CaptureTargetSP.getSwitch();
-      IUUpdateSwitch(svp, states, names, n);
-      int idx = svp->findOnSwitchIndex(); // 0..2
-      cam_->setDestination(idx);
-      svp->s = IPS_OK;
-
-      LOGF_INFO("Save destination set to %s", idx == 0 ? "In camera" : (idx == 1 ? "In computer" : "Both"));
-      IDSetSwitch(svp, nullptr);
-      return true;
-    }
-
     // --- Exposure presets (discrete shutter speeds) ---
     if (!strcmp(name, ExposurePresetSP.getName()))
     {
@@ -644,7 +633,7 @@ bool SigmaCCD::ISNewSwitch(const char *dev, const char *name,
   return INDI::CCD::ISNewSwitch(dev, name, states, names, n);
 }
 
-bool SigmaCCD::decodeJPEG(const SigmaImage &img, bool forStreaming, bool &sizeSet)
+bool SigmaCCD::decodeJPEG(const SigmaImage &img, bool &size_set, bool isStreaming)
 {
   // Decode JPEG to raw pixels
   struct jpeg_decompress_struct cinfo;
@@ -676,21 +665,21 @@ bool SigmaCCD::decodeJPEG(const SigmaImage &img, bool forStreaming, bool &sizeSe
   LOGF_INFO("LiveView size: %dx%dx%d", width, height, channels);
 
   // Set size only once when we know it
-  if (!sizeSet)
+  if (!size_set)
   {
     // Reset PrimaryCCD dimensions for streaming
     PrimaryCCD.setFrame(0, 0, width, height);
     PrimaryCCD.setFrameBufferSize(frameSize);
 
     Streamer->setSize(width, height);
-    sizeSet = true;
+    size_set = true;
     LOGF_INFO("LiveView size: %dx%d", width, height);
   }
 
   cinfo.out_color_space = JCS_RGB;
   jpeg_start_decompress(&cinfo);
 
-  if (forStreaming)
+  if (isStreaming)
   {
     // For streaming, use a local buffer
     std::vector<uint8_t> buffer(frameSize);

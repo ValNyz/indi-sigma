@@ -70,7 +70,7 @@ protected:
 private:
   void bind_logger();
 
-  bool decodeJPEG(const SigmaImage &img, bool forStreaming, bool &sizeSet);
+  bool decodeJPEG(const SigmaImage &img, bool &size_set, bool isStreaming);
   bool decodeDNG(const SigmaImage &img, int bitDepth);
 
   std::unique_ptr<SigmaBackend> cam_;
@@ -82,15 +82,6 @@ private:
   INDI::PropertySwitch ISOSP{0};
   std::vector<ISwitch> ISOItems;
   int defaultISO{400};
-
-  // Capture Target selection
-  INDI::PropertySwitch CaptureTargetSP{3};
-  enum
-  {
-    InCamera,
-    InComputer,
-    Both,
-  };
 
   // Exposure Presets
   INDI::PropertySwitch ExposurePresetSP{0};
